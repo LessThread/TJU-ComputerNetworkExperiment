@@ -6,8 +6,8 @@
 //是否启用debug输出
 #define DEBUG 1
 #define DEBUG_TRACE 0
-#define DEBUG_CORRUPTPROB 0.5
-#define DEBUG_LOSSPROB 0
+#define DEBUG_CORRUPTPROB 0.3
+#define DEBUG_LOSSPROB 0.3
 #define DEBUG_NSIMMAX 5
 
 #define debugger if(DEBUG)getchar()
@@ -22,7 +22,7 @@
 #define A_SEND 0
 #define B_SEND 1
 
-#define OVER_TIME 5000.00
+#define OVER_TIME 50.0
 
 typedef struct msg;
 typedef struct pkt;
@@ -57,6 +57,7 @@ int generateChecksum(struct pkt packet)
   return ret;
 }
 
+//不让重载？不让重载？不让重载？
 //封装：打包pkt
 struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 {
@@ -75,18 +76,20 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 /* 注意：C字符串需\0，此处是全部填充同一数据 */
 A_output(struct msg message)
 {
+
+  printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
   //A端构造pkt
-  struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM++);
+  struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM);
 
   //向A缓冲区拷贝
   strncpy(Abuf.data,message.data,20);
   
   //向网络发送消息
   tolayer3(A_SEND,A_Send_B);
-  PRINTF_DATA(message.data,"A send:");
+  PRINTF_DATA(message.data," A send:");
 
   //等待
-  //starttimer(A_SEND,OVER_TIME);
+  starttimer(A_SEND,OVER_TIME);
 }
 
 B_output(struct msg message)  /* need be completed only for extra credit */
@@ -98,12 +101,14 @@ A_input(struct pkt packet)
 {
   if (packet.acknum == OK)
   {
-    puts("A confirm OK\n");
+    PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
+    stoptimer(A_SEND);
+    SEQNUM++;
   }
   else
   {
-    puts("A confirm ERROR and resend\n");
-
+    PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
+    stoptimer(A_SEND);
     //重发缓冲区内容
     A_output(Abuf);
   }
@@ -113,14 +118,17 @@ A_input(struct pkt packet)
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-  PRINTF("call A timer");
+  PRINTF("\033[0m\033[1;33m A ends timing,the packet maybe loss. \033[0m \n");
+
+  //重发缓冲区
+  A_output(Abuf);
 }  
 
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
 A_init()
 {
-  printf("A_init\n");
+  PRINTF("A_init\n");
   for(int i=0;i<20;i++)
     Abuf.data[i] = '0';
 }
@@ -134,7 +142,7 @@ B_input(struct pkt packet)
   char buf[20] = {0};
   strncpy(buf,packet.payload,20);
   struct msg message;
-  PRINTF_DATA(buf,"B get :");
+  PRINTF_DATA(buf," B get :");
 
   if(packet.checksum == generateChecksum(packet))
   {
@@ -144,14 +152,14 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,OK,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    printf("B get OK\n");
+    PRINTF("\033[0m\033[1;32m B receive OK \033[0m \n");
   }
   else
   {
     struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    printf("B get ERROR\n");
+    PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
   }
   
   
