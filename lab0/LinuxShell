@@ -1,2 +1,2 @@
-gcc ./prog2.c -o ./bin/linux-test
-./bin/linux-test
+gcc ./prog2.c -o ./bin/linux-bin
+./bin/linux-bin
