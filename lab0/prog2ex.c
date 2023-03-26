@@ -27,7 +27,7 @@
 typedef struct msg;
 typedef struct pkt;
 
-int SEQNUM = 0;
+int SEQNUM = 1;
 struct msg Abuf;//停等缓冲区
 
 //消息本体
@@ -99,16 +99,16 @@ B_output(struct msg message)  /* need be completed only for extra credit */
 /* A 端接收函数 */
 A_input(struct pkt packet)
 {
-  if (packet.acknum == OK)
+  stoptimer(A_SEND);
+  if (packet.checksum == generateChecksum(packet) && packet.acknum == OK)
   {
     PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
-    stoptimer(A_SEND);
+    
     SEQNUM++;
   }
   else
   {
     PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
-    stoptimer(A_SEND);
     //重发缓冲区内容
     A_output(Abuf);
   }
