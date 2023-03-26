@@ -1,75 +1,119 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ******************************************************************
- ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: VERSION 1.1  J.F.Kurose
+#define BIDIRECTIONAL 0
 
-   This code should be used for PA2, unidirectional or bidirectional
-   data transfer protocols (from A to B. Bidirectional transfer of data
-   is for extra credit and is not required).  Network properties:
-   - one way network delay averages five time units (longer if there
-     are other messages in the channel for GBN), but can be larger
-   - packets can be corrupted (either the header or the data portion)
-     or lost, according to user-defined probabilities
-   - packets will be delivered in the order in which they were sent
-     (although some can be lost).
-**********************************************************************/
+//是否启用debug输出
+#define DEBUG 1
+#define DEBUG_TRACE 0
+#define DEBUG_CORRUPTPROB 0.5
+#define DEBUG_LOSSPROB 0
+#define DEBUG_NSIMMAX 5
 
-#define BIDIRECTIONAL 0    /* change to 1 if you're doing extra credit */
-                           /* and write a routine called B_output */
+#define debugger if(DEBUG)getchar()
+#define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
+#define PRINTF(X) if(DEBUG){printf("%s",X);printf("\n");}
 
-/* a "msg" is the data unit passed from layer 5 (teachers code) to layer  */
-/* 4 (students' code).  It contains the data (characters) to be delivered */
-/* to layer 5 via the students transport level protocol entities.         */
+//定义状态和默认值
+#define OK 1
+#define ERROR 0
+#define UNDEFINE -1
+
+#define A_SEND 0
+#define B_SEND 1
+
+#define OVER_TIME 5000.00
+
+typedef struct msg;
+typedef struct pkt;
+
+int SEQNUM = 0;
+struct msg Abuf;//停等缓冲区
+
+//消息本体
 struct msg {
   char data[20];
   };
 
-/* a packet is the data unit passed from layer 4 (students code) to layer */
-/* 3 (teachers code).  Note the pre-defined packet structure, which all   */
-/* students must follow. */
+
+//数据包载体
 struct pkt {
    int seqnum;
    int acknum;
    int checksum;
    char payload[20];
-    };
+};
 
-/********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
-
-
-
-
-/* called from layer 5, passed the data to be sent to other side */
-A_output(message)
-  struct msg message;
+//简单计算校验和
+int generateChecksum(struct pkt packet)
 {
-  printf("A_output:%s\n",message.data);
-  struct pkt A_Send_B;
-  A_Send_B.acknum = 1;
-  A_Send_B.seqnum = 1;
-  A_Send_B.checksum = 1;
-  strcpy(A_Send_B.payload,message.data);
-  tolayer3(0,A_Send_B);
-
+  int ret = 0;
+  for(int i=0;i<20;i++)
+  {
+    ret +=(int)(packet.payload[i]);
+  }
+  ret += packet.acknum;
+  ret += packet.seqnum;
+  return ret;
 }
 
-B_output(message)  /* need be completed only for extra credit */
-  struct msg message;
+//封装：打包pkt
+struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 {
-}
-
-/* called from layer 3, when a packet arrives for layer 4 */
-A_input(packet)
   struct pkt packet;
-{
+  strncpy(packet.payload,message.data,20);
+  packet.acknum = acknum;
+  packet.seqnum = seqnum;
+  packet.checksum = generateChecksum(packet);
+  return packet;
+}
 
+
+//....................................................
+
+/* A 端发送函数 */
+/* 注意：C字符串需\0，此处是全部填充同一数据 */
+A_output(struct msg message)
+{
+  //A端构造pkt
+  struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM++);
+
+  //向A缓冲区拷贝
+  strncpy(Abuf.data,message.data,20);
+  
+  //向网络发送消息
+  tolayer3(A_SEND,A_Send_B);
+  PRINTF_DATA(message.data,"A send:");
+
+  //等待
+  //starttimer(A_SEND,OVER_TIME);
+}
+
+B_output(struct msg message)  /* need be completed only for extra credit */
+{
+}
+
+/* A 端接收函数 */
+A_input(struct pkt packet)
+{
+  if (packet.acknum == OK)
+  {
+    puts("A confirm OK\n");
+  }
+  else
+  {
+    puts("A confirm ERROR and resend\n");
+
+    //重发缓冲区内容
+    A_output(Abuf);
+  }
+  
 }
 
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-
+  PRINTF("call A timer");
 }  
 
 /* the following routine will be called once (only) before any other */
@@ -77,19 +121,40 @@ A_timerinterrupt()
 A_init()
 {
   printf("A_init\n");
+  for(int i=0;i<20;i++)
+    Abuf.data[i] = '0';
 }
 
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* called from layer 3, when a packet arrives for layer 4 at B*/
-B_input(packet)
-  struct pkt packet;
+/* B 端接收函数 */
+B_input(struct pkt packet)
 {
   char buf[20] = {0};
-  strcpy(buf,packet.seqnum);
-  printf("b_inut:%s\n",buf);
-  //printf("B_input:%s\n",packet.seqnum);
+  strncpy(buf,packet.payload,20);
+  struct msg message;
+  PRINTF_DATA(buf,"B get :");
+
+  if(packet.checksum == generateChecksum(packet))
+  {
+    strncpy(message.data,buf,20);
+    tolayer5(B_SEND,message);
+    
+    struct pkt ret = generatePkg(message,OK,packet.seqnum);
+    tolayer3(B_SEND,ret);
+
+    printf("B get OK\n");
+  }
+  else
+  {
+    struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
+    tolayer3(B_SEND,ret);
+
+    printf("B get ERROR\n");
+  }
+  
+  
 }
 
 /* called when B's timer goes off */
@@ -242,18 +307,29 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
-  
-   printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
-   printf("Enter the number of messages to simulate: ");
-   scanf("%d",&nsimmax);
-   printf("Enter  packet loss probability [enter 0.0 for no loss]:");
-   scanf("%f",&lossprob);
-   printf("Enter packet corruption probability [0.0 for no corruption]:");
-   scanf("%f",&corruptprob);
-   printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
-   scanf("%f",&lambda);
-   printf("Enter TRACE:");
-   scanf("%d",&TRACE);
+  if(DEBUG)
+  {
+    nsimmax = DEBUG_NSIMMAX;
+    lossprob = DEBUG_LOSSPROB;
+    corruptprob = DEBUG_CORRUPTPROB;
+    lambda = 1000;
+    TRACE = DEBUG_TRACE;
+  }
+  else
+  {
+    printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
+    printf("Enter the number of messages to simulate: ");
+    scanf("%d",&nsimmax);
+    printf("Enter  packet loss probability [enter 0.0 for no loss]:");
+    scanf("%f",&lossprob);
+    printf("Enter packet corruption probability [0.0 for no corruption]:");
+    scanf("%f",&corruptprob);
+    printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
+    scanf("%f",&lambda);
+    printf("Enter TRACE:");
+    scanf("%d",&TRACE);
+  }
+   
 
    srand(9999);              /* init random number generator */
    sum = 0.0;                /* test random number generator for students */
