@@ -1,2 +1,2 @@
-gcc ./prog2.c -o ./bin/linux-bin
+gcc ./prog2ex.c -o ./bin/linux-bin
 ./bin/linux-bin
