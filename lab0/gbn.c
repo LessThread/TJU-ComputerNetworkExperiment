@@ -6,9 +6,9 @@
 //是否启用debug输出,在这里设置调试模式的概率，将DEBUG设置为0即可取消调试模式
 #define DEBUG 1
 #define DEBUG_TRACE 0
-#define DEBUG_CORRUPTPROB 0.2
-#define DEBUG_LOSSPROB 0.2
-#define DEBUG_NSIMMAX 100
+#define DEBUG_CORRUPTPROB 0.3
+#define DEBUG_LOSSPROB 0.3
+#define DEBUG_NSIMMAX 5
 
 #define debugger if(DEBUG)getchar()
 #define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
@@ -22,13 +22,16 @@
 #define A_SEND 0
 #define B_SEND 1
 
-#define OVER_TIME 100.0
+#define OVER_TIME 100.0 //定义超时时间
+#define WINDOWS_SIZE 10 //定义窗口大小
+#define GAP_TIME 20.0 //定义连续传输时间间隔
 
 typedef struct msg;
 typedef struct pkt;
 
 int SEQNUM = 1;
 struct msg Abuf;//停等缓冲区
+struct msg BufArr[WINDOWS_SIZE];//GBN窗口
 
 //消息本体
 struct msg {
@@ -157,8 +160,8 @@ B_input(struct pkt packet)
   }
   else
   {
-    //struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
-    //tolayer3(B_SEND,ret);
+    struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
+    tolayer3(B_SEND,ret);
 
     PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
   }
