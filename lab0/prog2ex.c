@@ -7,7 +7,7 @@
 #define DEBUG_TRACE 0
 #define DEBUG_CORRUPTPROB 0.2
 #define DEBUG_LOSSPROB 0.2
-#define DEBUG_NSIMMAX 20
+#define DEBUG_NSIMMAX 200
 
 #define debugger if(DEBUG)getchar()
 #define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
@@ -193,7 +193,7 @@ the emulator, you're welcome to look at the code - but again, you should have
 to, and you defeinitely should not have to modify
 ******************************************************************/
 
-//定义链式队列，储存包事件，具体结构指针已经给出
+//定义链式队列，储存包事件，具体结构已经给出
 struct event {
    float evtime;           /* event time */
    int evtype;             /* event type code */
@@ -324,6 +324,7 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
+  //参数输入输出
   if(DEBUG)
   {
     nsimmax = DEBUG_NSIMMAX;
@@ -353,6 +354,8 @@ init()                         /* initialize the simulator */
    for (i=0; i<1000; i++)
       sum=sum+jimsrand();    /* jimsrand() should be uniform in [0,1] */
    avg = sum/1000.0;
+
+   //校验随机函数的取值是否合理
    if (avg < 0.25 || avg > 0.75) {
     printf("It is likely that random number generation on your machine\n" ); 
     printf("is different from what this emulator expects.  Please take\n");

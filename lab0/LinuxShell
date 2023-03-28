@@ -3,3 +3,4 @@ mkdir bin
 fi
 gcc ./prog2ex.c -o ./bin/linux-bin
 ./bin/linux-bin
+
