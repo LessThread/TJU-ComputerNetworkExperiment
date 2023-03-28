@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-
 #define BIDIRECTIONAL 0
 
 //是否启用debug输出,在这里设置调试模式的概率，将DEBUG设置为0即可取消调试模式
@@ -8,7 +7,7 @@
 #define DEBUG_TRACE 0
 #define DEBUG_CORRUPTPROB 0.2
 #define DEBUG_LOSSPROB 0.2
-#define DEBUG_NSIMMAX 100
+#define DEBUG_NSIMMAX 20
 
 #define debugger if(DEBUG)getchar()
 #define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
@@ -159,7 +158,6 @@ B_input(struct pkt packet)
   {
     //struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     //tolayer3(B_SEND,ret);
-
     PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
   }
   
@@ -195,6 +193,7 @@ the emulator, you're welcome to look at the code - but again, you should have
 to, and you defeinitely should not have to modify
 ******************************************************************/
 
+//定义链式队列，储存包事件，具体结构指针已经给出
 struct event {
    float evtime;           /* event time */
    int evtype;             /* event type code */
@@ -237,17 +236,24 @@ main()
    int i,j;
    char c; 
   
+   //初始化AB端，初始化全局变量
    init();
    A_init();
    B_init();
    
+   //消息队列循环
    while (1) {
+        //如果包数量达到，则终止模拟，此处使用的是队列指针
         eventptr = evlist;            /* get next event to simulate */
         if (eventptr==NULL)
            goto terminate;
+
+        //已发包数量+1,队列指针下移
         evlist = evlist->next;        /* remove this event from event list */
         if (evlist!=NULL)
            evlist->prev=NULL;
+
+        //调试消息输出
         if (TRACE>=2) {
            printf("\nEVENT time: %f,",eventptr->evtime);
            printf("  type: %d",eventptr->evtype);
@@ -259,6 +265,8 @@ main()
 	     printf(", fromlayer3 ");
            printf(" entity: %d\n",eventptr->eventity);
            }
+
+        
         time = eventptr->evtime;        /* update time to next event time */
         if (nsim==nsimmax)
 	  break;                        /* all done with simulation */
@@ -369,8 +377,9 @@ float jimsrand()
 {
   double mmm = 2147483647 ;       /* largest int  - MACHINE DEPENDENT!!!!!!!!   */
   float x;
-  #ifdef _WIN32                   /* individual students may need to change mmm */ 
-    x = rand()/mmm*50000;
+  #ifdef _WIN32                  /* individual students may need to change mmm */ 
+    mmm = 0x7fff;
+    x = rand()/mmm;
   #elif __linux__
     x = rand()/mmm;
   #endif                          /* x should be uniform in [0,1] */
