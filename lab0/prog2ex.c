@@ -4,7 +4,8 @@
 #define BIDIRECTIONAL 0
 
 //是否启用debug输出,在这里设置调试模式的概率，将DEBUG设置为0即可取消调试模式
-#define DEBUG 1
+#define DEBUG 0
+#define USE_INPUT 0
 #define DEBUG_TRACE 0
 #define DEBUG_CORRUPTPROB 0.2
 #define DEBUG_LOSSPROB 0.2
@@ -77,7 +78,7 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 A_output(struct msg message)
 {
 
-  printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
+  //printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
   //A端构造pkt
   struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM);
 
@@ -316,7 +317,7 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
-  if(DEBUG)
+  if(USE_INPUT)
   {
     nsimmax = DEBUG_NSIMMAX;
     lossprob = DEBUG_LOSSPROB;
