@@ -10,6 +10,10 @@
 #define DEBUG_LOSSPROB 0.3
 #define DEBUG_NSIMMAX 5
 
+//是否启用格式化输出
+#define OUTPUT 0
+
+
 #define debugger if(DEBUG)getchar()
 #define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
 #define PRINTF(X) if(DEBUG){printf("%s",X);printf("\n");}
