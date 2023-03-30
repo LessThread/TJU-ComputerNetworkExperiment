@@ -4,10 +4,11 @@
 
 //是否启用debug输出,在这里设置调试模式的概率，将DEBUG设置为0即可取消调试模式
 #define DEBUG 1
+#define OUTPUT 1
 #define DEBUG_TRACE 0
 #define DEBUG_CORRUPTPROB 0.2
 #define DEBUG_LOSSPROB 0.2
-#define DEBUG_NSIMMAX 200
+#define DEBUG_NSIMMAX 108
 
 #define debugger if(DEBUG)getchar()
 #define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
@@ -75,8 +76,8 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 /* 注意：C字符串需\0，此处是全部填充同一数据 */
 A_output(struct msg message)
 {
-
-  printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
+  if(OUTPUT)printf("SEQNUM:%d\n", SEQNUM);
+  if(!OUTPUT)printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
   //A端构造pkt
   struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM);
 
@@ -101,13 +102,15 @@ A_input(struct pkt packet)
   stoptimer(A_SEND);
   if (packet.checksum == generateChecksum(packet) && packet.acknum == OK)
   {
-    PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
+    if(OUTPUT)PRINTF("A confirm OK\n");
+    if(!OUTPUT)PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
     
     SEQNUM++;
   }
   else
   {
-    PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
+    if(OUTPUT)PRINTF("A confirm ERROR and resend\n");
+    if(!OUTPUT)PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
     //重发缓冲区内容
     A_output(Abuf);
   }
@@ -117,7 +120,8 @@ A_input(struct pkt packet)
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-  PRINTF("\033[0m\033[1;33m A ends timing,the packet maybe loss. \033[0m \n");
+  if(OUTPUT)PRINTF("A ends timing,the packet maybe loss.\n");
+  if(!OUTPUT)PRINTF("\033[0m\033[1;33m A ends timing,the packet maybe loss. \033[0m \n");
   //stoptimer(A_SEND);
 
   //重发缓冲区
@@ -152,13 +156,15 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,OK,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    PRINTF("\033[0m\033[1;32m B receive OK \033[0m \n");
+    if(OUTPUT)PRINTF("B receive OK \n");
+    if(!OUTPUT)PRINTF("\033[0m\033[1;32m B receive OK \033[0m \n");
   }
   else
   {
     //struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     //tolayer3(B_SEND,ret);
-    PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
+    if(OUTPUT)PRINTF("B get ERROR\n");
+    if(!OUTPUT)PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
   }
   
   
@@ -271,11 +277,15 @@ main()
         if (nsim==nsimmax)
 	  break;                        /* all done with simulation */
         if (eventptr->evtype == FROM_LAYER5 ) {
+          //if(nsim +1   < nsimmax)//更改
             generate_next_arrival();   /* set up future arrival */
             /* fill in msg to give with string of same letter */    
             j = nsim % 26; 
             for (i=0; i<20; i++)  
                msg2give.data[i] = 97 + j;
+
+            //msg2give.data[19]=0;//非本质更改，我们不用
+
             if (TRACE>2) {
                printf("          MAINLOOP: data given to student: ");
                  for (i=0; i<20; i++) 
