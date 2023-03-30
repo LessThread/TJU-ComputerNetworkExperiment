@@ -1,49 +1,57 @@
+//GBN 2023.4.1
+
 #include <stdio.h>
 #include <string.h>
 
-#define BIDIRECTIONAL 0
 
-//是否启用debug输出,在这里设置调试模式的概率，将DEBUG设置为0即可取消调试模式
-#define DEBUG 1
-#define DEBUG_TRACE 0
-#define DEBUG_CORRUPTPROB 0.3
-#define DEBUG_LOSSPROB 0.3
-#define DEBUG_NSIMMAX 5
+#define BIDIRECTIONAL 0   
 
-//是否启用格式化输出
+//调试用宏定义,更好的版本
+#define DEBUG 0
 #define OUTPUT 0
+#define P_WARNNING(str) if(DEBUG)printf("\033[0m\033[1;33m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
+#define P_ERROR(str) if(DEBUG)printf("\033[0m\033[1;31m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
+#define P_OK(str) if(DEBUG)printf("033[0m\033[1;32m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
 
-
-#define debugger if(DEBUG)getchar()
-#define PRINTF_DATA(X,Y) if(DEBUG){printf("%s",Y);for(int i=0;i<20;i++){printf("%c,",X[i]);}printf("\n");}
-#define PRINTF(X) if(DEBUG){printf("%s",X);printf("\n");}
-
-//定义状态和默认值
+//全局设置
 #define OK 1
 #define ERROR 0
 #define UNDEFINE -1
+#define WAIT_ACK 1
 
 #define A_SEND 0
 #define B_SEND 1
 
-#define OVER_TIME 100.0 //定义超时时间
-#define WINDOWS_SIZE 10 //定义窗口大小
-#define GAP_TIME 20.0 //定义连续传输时间间隔
+#define OVER_TIME 100.0
+#define WINDOW_SIZE 50
 
 typedef struct msg;
 typedef struct pkt;
+typedef struct Window_item;
 
-int SEQNUM = 1;
-struct msg Abuf;//停等缓冲区
-struct msg BufArr[WINDOWS_SIZE];//GBN窗口
 
-//消息本体
+//全局变量
+
+struct Window_item* list;
+int ListCount;
+int header;
+int tail;
+int windows_num = 0;
+
+int SEQNUM = 0;
+
+//窗口列表
+struct Window_item 
+{
+  struct pkt Pkt;
+  int state;
+};
+
 struct msg {
   char data[20];
-  };
+};
 
 
-//数据包载体
 struct pkt {
    int seqnum;
    int acknum;
@@ -51,7 +59,10 @@ struct pkt {
    char payload[20];
 };
 
-//简单计算校验和
+
+
+//全局函数
+//计算校验和
 int generateChecksum(struct pkt packet)
 {
   int ret = 0;
@@ -64,8 +75,7 @@ int generateChecksum(struct pkt packet)
   return ret;
 }
 
-//不让重载？不让重载？不让重载？
-//封装：打包pkt
+//封装函数：打包pkt
 struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 {
   struct pkt packet;
@@ -77,75 +87,85 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 }
 
 
-//....................................................
-
-/* A 端发送函数 */
-/* 注意：C字符串需\0，此处是全部填充同一数据 */
-A_output(struct msg message)
+/********* 上层函数实现部分 *********/
+checkList()
 {
 
-  printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", SEQNUM);
-  //A端构造pkt
-  struct pkt A_Send_B = generatePkg(message,UNDEFINE,SEQNUM);
+  //检查窗口情况
 
-  //向A缓冲区拷贝
-  strncpy(Abuf.data,message.data,20);
-  
-  //向网络发送消息
-  tolayer3(A_SEND,A_Send_B);
-  PRINTF_DATA(message.data," A send:");
+  //小于窗口容量则发出
+ if(windows_num < WINDOW_SIZE)
+  {
+    tolayer3(A_SEND,list[header].Pkt);
+    stoptimer(A_SEND);
+    starttimer(A_SEND);
+    
 
-  //等待
-  starttimer(A_SEND,OVER_TIME);
+    header++;
+    windows_num++;
+
+  }
+  //超出窗口容量则等待
+  else
+  {
+    
+  }
 }
 
-B_output(struct msg message)  /* need be completed only for extra credit */
+
+
+
+A_output(message)
+  struct msg message;
+{
+  //把消息打包放入全局队列
+  struct Window_item* item = &list[ListCount++];
+  item->Pkt = generatePkg(message,UNDEFINE,SEQNUM++);
+  checkList();
+}
+
+B_output(message)  /* need be completed only for extra credit */
+  struct msg message;
 {
 }
 
-/* A 端接收函数 */
-A_input(struct pkt packet)
+/* called from layer 3, when a packet arrives for layer 4 */
+A_input(packet)
+  struct pkt packet;
 {
   stoptimer(A_SEND);
   if (packet.checksum == generateChecksum(packet) && packet.acknum == OK)
   {
-    PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
-    
-    SEQNUM++;
+    P_OK("A confim OK");
+
   }
-  else
-  {
-    PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
-    //重发缓冲区内容
-    A_output(Abuf);
-  }
-  
+
+
 }
 
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-  PRINTF("\033[0m\033[1;33m A ends timing,the packet maybe loss. \033[0m \n");
-  //stoptimer(A_SEND);
 
-  //重发缓冲区
-  A_output(Abuf);
 }  
 
-/* the following routine will be called once (only) before any other */
-/* entity A routines are called. You can use it to do any initialization */
 A_init()
 {
-  PRINTF("A_init\n");
-  for(int i=0;i<20;i++)
-    Abuf.data[i] = '0';
+  //全局消息队列
+  list = malloc(sizeof(struct Window_item ) * nsimmax);
+
+  //指针初始化
+  header = 0;
+  tail = 0;
+  ListCount = 0;
 }
 
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* B 端接收函数 */
-B_input(struct pkt packet)
+/* called from layer 3, when a packet arrives for layer 4 at B*/
+B_input(packet)
+  struct pkt packet;
 {
   char buf[20] = {0};
   strncpy(buf,packet.payload,20);
@@ -160,18 +180,16 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,OK,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    PRINTF("\033[0m\033[1;32m B receive OK \033[0m \n");
+    P_OK("B get OK");
   }
   else
   {
     struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
+    P_ERROR("B get error");
   }
-  
-  
-}
+};
 
 /* called when B's timer goes off */
 B_timerinterrupt()
@@ -323,29 +341,18 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
-  if(DEBUG)
-  {
-    nsimmax = DEBUG_NSIMMAX;
-    lossprob = DEBUG_LOSSPROB;
-    corruptprob = DEBUG_CORRUPTPROB;
-    lambda = 1000;
-    TRACE = DEBUG_TRACE;
-  }
-  else
-  {
-    printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
-    printf("Enter the number of messages to simulate: ");
-    scanf("%d",&nsimmax);
-    printf("Enter  packet loss probability [enter 0.0 for no loss]:");
-    scanf("%f",&lossprob);
-    printf("Enter packet corruption probability [0.0 for no corruption]:");
-    scanf("%f",&corruptprob);
-    printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
-    scanf("%f",&lambda);
-    printf("Enter TRACE:");
-    scanf("%d",&TRACE);
-  }
-   
+  
+   printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
+   printf("Enter the number of messages to simulate: ");
+   scanf("%d",&nsimmax);
+   printf("Enter  packet loss probability [enter 0.0 for no loss]:");
+   scanf("%f",&lossprob);
+   printf("Enter packet corruption probability [0.0 for no corruption]:");
+   scanf("%f",&corruptprob);
+   printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
+   scanf("%f",&lambda);
+   printf("Enter TRACE:");
+   scanf("%d",&TRACE);
 
    srand(9999);              /* init random number generator */
    sum = 0.0;                /* test random number generator for students */
@@ -374,14 +381,9 @@ init()                         /* initialize the simulator */
 /****************************************************************************/
 float jimsrand() 
 {
-  double mmm = 2147483647 ;       /* largest int  - MACHINE DEPENDENT!!!!!!!!   */
-  float x;
-  #ifdef _WIN32                   /* individual students may need to change mmm */ 
-    x = rand()/mmm*50000;
-  #elif __linux__
-    x = rand()/mmm;
-  #endif                          /* x should be uniform in [0,1] */
-  //printf("%f\n",x);
+  double mmm = 2147483647;   /* largest int  - MACHINE DEPENDENT!!!!!!!!   */
+  float x;                   /* individual students may need to change mmm */ 
+  x = rand()/mmm;            /* x should be uniform in [0,1] */
   return(x);
 }  
 
