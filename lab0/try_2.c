@@ -7,8 +7,8 @@
 #define DEBUG 1
 #define USE_INPUT 0
 #define DEBUG_TRACE 0
-#define DEBUG_CORRUPTPROB 0.2
-#define DEBUG_LOSSPROB 0.2
+#define DEBUG_CORRUPTPROB 0.0
+#define DEBUG_LOSSPROB 0.1
 #define DEBUG_NSIMMAX 100
 
 #define debugger if(DEBUG)getchar()
@@ -85,8 +85,10 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
 A_output(struct msg message)
 {
  //检验是否满足条件， 不满足结束、等待
- if(nextseqnum>=base+windows)
+ if(nextseqnum>base+windows){
+    printf("next:%d,base:%d,windwos:%d\n",nextseqnum,base,windows);
     return;
+ }
 
   printf("\033[0m\033[1;34m SEQNUM:%d \033[0m\n", nextseqnum);
 
@@ -102,7 +104,7 @@ A_output(struct msg message)
   PRINTF_DATA(message.data," A_output:A send:");
   
   if(base==nextseqnum)
-  starttimer(A_SEND,OVER_TIME);
+    starttimer(A_SEND,OVER_TIME);
 
   nextseqnum++;
 }
@@ -116,26 +118,24 @@ A_input(struct pkt packet)
 {
   if (packet.checksum == generateChecksum(packet) && packet.acknum == packet.seqnum)
   {
-    //PRINTF("\033[0m\033[1;32m A confirm OK \033[0m \n");
-   printf(" A_input:A confirm OK \n",packet.seqnum);
+    printf(" A_input:A confirm OK \n",packet.seqnum);
 
-   //检验接收是否出现序列号被破坏的情况
-   if(base>=packet.seqnum+1) return;
-   //无误，基数后移
-   base=packet.seqnum+1;
-   
-  if(base==nextseqnum)
-    stoptimer(A_SEND);
-  else
-  {
-    stoptimer(A_SEND);
-    starttimer(A_SEND,OVER_TIME);
+    //检验接收是否出现序列号被破坏的情况
+    if(base>=packet.seqnum+1) return;
+    //无误，基数后移
+    base=packet.seqnum+1;
+    
+    if(base==nextseqnum)
+      stoptimer(A_SEND);
+    else
+    {
+      stoptimer(A_SEND);
+      starttimer(A_SEND,OVER_TIME);
+    }
   }
 
-  }
   else   //需要重发的情况，按照GBN协议，初步考虑应当是超时函数后，在选择重发，然后在此情况下，重发应当于超时函数中
   {
-   //PRINTF("\033[0m\033[1;33m A confirm ERROR and resend \033[0m \n");
     PRINTF(" A_input:A confirm ERROR  \n");
   }
   
@@ -144,9 +144,7 @@ A_input(struct pkt packet)
 /* called when A's timer goes off */
 A_timerinterrupt()// 超时作为判断依据，重发操作在这里实现
 {
-  //PRINTF("\033[0m\033[1;33m A ends timing,the packet maybe loss. \033[0m \n");
   PRINTF(" A_timerinterrupt:A ends timing \n");
-  //stoptimer(A_SEND);
 
   //重发缓冲区,考虑两种情况，后移窗口和不后移情况
   int start=base % buf_size;
@@ -395,7 +393,7 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
- /* if(USE_INPUT)
+  if(DEBUG)
   {
     nsimmax = DEBUG_NSIMMAX;
     lossprob = DEBUG_LOSSPROB;
@@ -404,7 +402,7 @@ init()                         /* initialize the simulator */
     TRACE = DEBUG_TRACE;
   }
   else
-  {*/
+  {
     printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
     printf("Enter the number of messages to simulate: ");
     scanf("%d",&nsimmax);
@@ -416,7 +414,7 @@ init()                         /* initialize the simulator */
     scanf("%f",&lambda);
     printf("Enter TRACE:");
     scanf("%d",&TRACE);
- // }
+ }
    
 
    srand(9999);              /* init random number generator */

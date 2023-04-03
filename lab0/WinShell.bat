@@ -1,2 +1,2 @@
-gcc ./prog2ex.c -o ./bin/win-bin
-./bin/win-bin < ./bin/trance.txt > ./bin/win-log.txt
+gcc ./gbn2.c -o ./bin/gbn2.exe -w
+.\bin\gbn2.exe

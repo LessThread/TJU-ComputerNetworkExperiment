@@ -2,4 +2,4 @@ if  [ !-e ./bin ];then
 mkdir bin
 fi
 gcc ./prog2ex.c -o ./bin/linux-bin
-./bin/linux-bin < ./bin/trance.txt > ./bin/linux-log.txt
+./bin/linux-bin < ./bin/trance.txt

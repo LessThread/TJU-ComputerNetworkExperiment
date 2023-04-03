@@ -3,44 +3,51 @@
 #include <stdio.h>
 #include <string.h>
 
-
 #define BIDIRECTIONAL 0   
 
 //调试用宏定义,更好的版本
-#define DEBUG 0
+#define DEBUG 1
 #define OUTPUT 0
-#define P_WARNNING(str) if(DEBUG)printf("\033[0m\033[1;33m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
-#define P_ERROR(str) if(DEBUG)printf("\033[0m\033[1;31m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
-#define P_OK(str) if(DEBUG)printf("033[0m\033[1;32m%s\033[0m \n",str);if(OUTPUT)printf("%s",str)
+#define P_WARNNING(str) if(DEBUG)printf("\033[0m\033[1;33m[WARNNING]\033[0m%s \n",str);if(OUTPUT)printf("%s",str)
+#define P_ERROR(str) if(DEBUG)printf("\033[0m\033[1;31m[ERROR]\033[0m%s \n",str);if(OUTPUT)printf("%s",str)
+#define P_OK(str) if(DEBUG)printf("\033[0m\033[1;32m[OK]\033[0m%s \n",str);if(OUTPUT)printf("%s",str)
+#define P_MESSAGE(str) if(DEBUG)printf("\033[0m\033[1;32m\033[0m%s \n",str);if(OUTPUT)printf("%s",str)
 
 //全局设置
 #define OK 1
 #define ERROR 0
 #define UNDEFINE -1
-#define WAIT_ACK 1
+#define WAITING 2
+#define READY 3
 
 #define A_SEND 0
 #define B_SEND 1
 
-#define OVER_TIME 100.0
-#define WINDOW_SIZE 50
+#define OVER_TIME 10000.0
+#define WINDOW_SIZE 5
 
 typedef struct msg;
 typedef struct pkt;
 typedef struct Window_item;
+int nsimmax = 0;
+int Breceive = 0;
 
 
 //全局变量
 
-struct Window_item* list;
-int ListCount;
-int header;
-int tail;
-int windows_num = 0;
-
-int SEQNUM = 0;
+struct Window_item* list;//全局消息队列
+int ListCount;//全局总消息指针
+int header;//窗口头指针
+int tail;//窗口末指针
 
 //窗口列表
+struct pkt {
+   int seqnum;
+   int acknum;
+   int checksum;
+   char payload[20];
+};
+
 struct Window_item 
 {
   struct pkt Pkt;
@@ -52,12 +59,6 @@ struct msg {
 };
 
 
-struct pkt {
-   int seqnum;
-   int acknum;
-   int checksum;
-   char payload[20];
-};
 
 
 
@@ -86,48 +87,51 @@ struct pkt generatePkg(struct msg message,int acknum,int seqnum)
   return packet;
 }
 
+//封装函数：获取窗口内消息总数
+int windows_num(){
+  return header - tail + 1;
+}
+
 
 /********* 上层函数实现部分 *********/
 checkList()
 {
-
-  //检查窗口情况
-
-  //小于窗口容量则发出
- if(windows_num < WINDOW_SIZE)
+  //小于窗口容量,到底则注意溢出
+ if(windows_num() < WINDOW_SIZE)
   {
-    tolayer3(A_SEND,list[header].Pkt);
-    stoptimer(A_SEND);
-    starttimer(A_SEND);
-    
+    //检测是否有消息需要发出,有则发出
+    if(list[header].state != UNDEFINE )
+    {
+      if(DEBUG)printf("\n \033[0m\033[1;34m[SEND-MESSAGE-ID] %d [header,tail] %d,%d \033[0m \n",list[header].Pkt.seqnum,header,tail);if(OUTPUT)printf("%d",ListCount);
+      
+      list[header].state = WAITING;
+      tolayer3(A_SEND,list[header].Pkt);
 
-    header++;
-    windows_num++;
-
-  }
-  //超出窗口容量则等待
-  else
-  {
-    
+      if( header == tail){
+        P_WARNNING("A timer start");
+        starttimer(A_SEND,OVER_TIME);
+      }
+      if(header < ListCount)
+      {
+        header++;
+      }
+    }
   }
 }
 
 
-
+/********* 中层函数实现部分 *********/
 
 A_output(message)
   struct msg message;
 {
   //把消息打包放入全局队列
-  struct Window_item* item = &list[ListCount++];
-  item->Pkt = generatePkg(message,UNDEFINE,SEQNUM++);
+  struct Window_item* item = &list[ListCount];
+  item->Pkt = generatePkg(message,UNDEFINE,ListCount++);
+  item->state = READY;
   checkList();
 }
 
-B_output(message)  /* need be completed only for extra credit */
-  struct msg message;
-{
-}
 
 /* called from layer 3, when a packet arrives for layer 4 */
 A_input(packet)
@@ -137,31 +141,44 @@ A_input(packet)
   if (packet.checksum == generateChecksum(packet) && packet.acknum == OK)
   {
     P_OK("A confim OK");
-
+    if(tail < header)
+    {
+      tail++;
+      starttimer(A_SEND,OVER_TIME);
+      checkList();
+    }
   }
+  else
+  {
+    P_ERROR("A confim ERROR");
+    header = tail;
+  }
+
 
 
 }
 
-/* called when A's timer goes off */
+//计时器结束，重发尾部消息。（乱序到达？）
 A_timerinterrupt()
 {
-
+  P_WARNNING("A timer interrupt");
+  header = tail;
 }  
 
 A_init()
 {
   //全局消息队列
   list = malloc(sizeof(struct Window_item ) * nsimmax);
+  for(int i=0;i<nsimmax;i++)
+  {
+    list[i].state = UNDEFINE;
+  }
 
   //指针初始化
   header = 0;
   tail = 0;
   ListCount = 0;
 }
-
-
-/* Note that with simplex transfer from a-to-B, there is no B_output() */
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 B_input(packet)
@@ -170,9 +187,8 @@ B_input(packet)
   char buf[20] = {0};
   strncpy(buf,packet.payload,20);
   struct msg message;
-  PRINTF_DATA(buf," B get :");
 
-  if(packet.checksum == generateChecksum(packet))
+  if(packet.checksum == generateChecksum(packet) && packet.seqnum == Breceive)
   {
     strncpy(message.data,buf,20);
     tolayer5(B_SEND,message);
@@ -180,6 +196,7 @@ B_input(packet)
     struct pkt ret = generatePkg(message,OK,packet.seqnum);
     tolayer3(B_SEND,ret);
 
+    Breceive++;
     P_OK("B get OK");
   }
   else
@@ -190,6 +207,11 @@ B_input(packet)
     P_ERROR("B get error");
   }
 };
+
+B_output(message)  /* need be completed only for extra credit */
+  struct msg message;
+{
+}
 
 /* called when B's timer goes off */
 B_timerinterrupt()
@@ -244,7 +266,7 @@ struct event *evlist = NULL;   /* the event list */
 
 int TRACE = 1;             /* for my debugging */
 int nsim = 0;              /* number of messages from 5 to 4 so far */ 
-int nsimmax = 0;           /* number of msgs to generate, then stop */
+         /* number of msgs to generate, then stop */
 float time = 0.000;
 float lossprob;            /* probability that a packet is dropped  */
 float corruptprob;         /* probability that one bit is packet is flipped */
@@ -286,7 +308,7 @@ main()
            }
         time = eventptr->evtime;        /* update time to next event time */
         if (nsim==nsimmax)
-	  break;                        /* all done with simulation */
+	         break;                        /* all done with simulation */
         if (eventptr->evtype == FROM_LAYER5 ) {
             generate_next_arrival();   /* set up future arrival */
             /* fill in msg to give with string of same letter */    
@@ -341,19 +363,28 @@ init()                         /* initialize the simulator */
   float sum, avg;
   float jimsrand();
   
-  
-   printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
-   printf("Enter the number of messages to simulate: ");
-   scanf("%d",&nsimmax);
-   printf("Enter  packet loss probability [enter 0.0 for no loss]:");
-   scanf("%f",&lossprob);
-   printf("Enter packet corruption probability [0.0 for no corruption]:");
-   scanf("%f",&corruptprob);
-   printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
-   scanf("%f",&lambda);
-   printf("Enter TRACE:");
-   scanf("%d",&TRACE);
+  if(DEBUG)
+  {
+    nsimmax = 10;
+    lossprob =0.2;
+    corruptprob = 0.2;
+    lambda = 1000;
+    TRACE = 2;
+  }
 
+  else{
+    printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
+    printf("Enter the number of messages to simulate: ");
+    scanf("%d",&nsimmax);
+    printf("Enter  packet loss probability [enter 0.0 for no loss]:");
+    scanf("%f",&lossprob);
+    printf("Enter packet corruption probability [0.0 for no corruption]:");
+    scanf("%f",&corruptprob);
+    printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
+    scanf("%f",&lambda);
+    printf("Enter TRACE:");
+    scanf("%d",&TRACE);
+}
    srand(9999);              /* init random number generator */
    sum = 0.0;                /* test random number generator for students */
    for (i=0; i<1000; i++)
@@ -381,9 +412,15 @@ init()                         /* initialize the simulator */
 /****************************************************************************/
 float jimsrand() 
 {
-  double mmm = 2147483647;   /* largest int  - MACHINE DEPENDENT!!!!!!!!   */
-  float x;                   /* individual students may need to change mmm */ 
-  x = rand()/mmm;            /* x should be uniform in [0,1] */
+  double mmm = 2147483647 ;       /* largest int  - MACHINE DEPENDENT!!!!!!!!   */
+  float x;
+  #ifdef _WIN32                  /* individual students may need to change mmm */ 
+    mmm = 0x7fff;
+    x = rand()/mmm;
+  #elif __linux__
+    x = rand()/mmm;
+  #endif                          /* x should be uniform in [0,1] */
+  //printf("%f\n",x);
   return(x);
 }  
 
@@ -509,9 +546,7 @@ float increment;
  char *malloc();
 
  if (TRACE>2)
-    printf("          START TIMER: starting timer at %f\n",time);
- /* be nice: check to see if timer is already started, if so, then  warn */
-/* for (q=evlist; q!=NULL && q->next!=NULL; q = q->next)  */
+    printf("START TIMER: starting timer at %f\n",time);
    for (q=evlist; q!=NULL ; q = q->next)  
     if ( (q->evtype==TIMER_INTERRUPT  && q->eventity==AorB) ) { 
       printf("Warning: attempt to start a timer that is already started\n");
