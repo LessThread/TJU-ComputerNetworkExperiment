@@ -102,7 +102,7 @@ checkList()
     //检测是否有消息需要发出,有则发出
     if(list[header].state != UNDEFINE )
     {
-      if(DEBUG)printf("\n \033[0m\033[1;34m[SEND-MESSAGE-ID] %d [header,tail] %d,%d \033[0m \n",list[header].Pkt.seqnum,header,tail);if(OUTPUT)printf("%d",ListCount);
+      if(DEBUG)printf("\n\033[0m\033[1;34m[SEND-MESSAGE-ID] %d/%d [header,tail] %d,%d \033[0m \n",list[header].Pkt.seqnum,ListCount-1,header,tail);if(OUTPUT)printf("%d",ListCount);
       
       list[header].state = WAITING;
       tolayer3(A_SEND,list[header].Pkt);
@@ -129,6 +129,7 @@ A_output(message)
   struct Window_item* item = &list[ListCount];
   item->Pkt = generatePkg(message,UNDEFINE,ListCount++);
   item->state = READY;
+  printf("checksum %d\n",item->Pkt.checksum);
   checkList();
 }
 
@@ -152,6 +153,7 @@ A_input(packet)
   {
     P_ERROR("A confim ERROR");
     header = tail;
+    checkList();
   }
 
 
@@ -188,7 +190,7 @@ B_input(packet)
   strncpy(buf,packet.payload,20);
   struct msg message;
 
-  if(packet.checksum == generateChecksum(packet) && packet.seqnum == Breceive)
+  if(packet.checksum == generateChecksum(packet) && packet.seqnum <= Breceive)
   {
     strncpy(message.data,buf,20);
     tolayer5(B_SEND,message);
@@ -196,7 +198,10 @@ B_input(packet)
     struct pkt ret = generatePkg(message,OK,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    Breceive++;
+    if (packet.seqnum == Breceive)
+    {
+      Breceive++;
+    }
     P_OK("B get OK");
   }
   else
@@ -289,70 +294,95 @@ main()
    B_init();
    
    while (1) {
-        eventptr = evlist;            /* get next event to simulate */
+        eventptr = evlist; 
+
         if (eventptr==NULL)
-           goto terminate;
-        evlist = evlist->next;        /* remove this event from event list */
+            goto terminate;
+
+        evlist = evlist->next;  
+
         if (evlist!=NULL)
-           evlist->prev=NULL;
-        if (TRACE>=2) {
-           printf("\nEVENT time: %f,",eventptr->evtime);
-           printf("  type: %d",eventptr->evtype);
-           if (eventptr->evtype==0)
-	       printf(", timerinterrupt  ");
-             else if (eventptr->evtype==1)
-               printf(", fromlayer5 ");
-             else
-	     printf(", fromlayer3 ");
-           printf(" entity: %d\n",eventptr->eventity);
-           }
+            evlist->prev=NULL;
+        if (TRACE>=2) 
+        {
+          printf("\nEVENT time: %f,",eventptr->evtime);
+          printf("  type: %d",eventptr->evtype);
+          if (eventptr->evtype==0)
+          printf(", timerinterrupt  ");
+            else if (eventptr->evtype==1)
+              printf(", fromlayer5 ");
+            else
+          printf(", fromlayer3 ");
+          printf(" entity: %d\n",eventptr->eventity);
+          }
+        
         time = eventptr->evtime;        /* update time to next event time */
+
+
+
         if (nsim==nsimmax)
-	         break;                        /* all done with simulation */
-        if (eventptr->evtype == FROM_LAYER5 ) {
-            generate_next_arrival();   /* set up future arrival */
-            /* fill in msg to give with string of same letter */    
+	        break;           
+
+
+
+        if (eventptr->evtype == FROM_LAYER5 ) 
+        {
+            generate_next_arrival(); 
             j = nsim % 26; 
             for (i=0; i<20; i++)  
-               msg2give.data[i] = 97 + j;
-            if (TRACE>2) {
-               printf("          MAINLOOP: data given to student: ");
-                 for (i=0; i<20; i++) 
-                  printf("%c", msg2give.data[i]);
-               printf("\n");
-	     }
+                msg2give.data[i] = 97 + j;
+
+            if (TRACE>2) 
+            {
+              printf("          MAINLOOP: data given to student: ");
+                for (i=0; i<20; i++) 
+                printf("%c", msg2give.data[i]);
+              printf("\n");
+	          }
+
+
             nsim++;
+
             if (eventptr->eventity == A) 
-               A_output(msg2give);  
-             else
-               B_output(msg2give);  
+                A_output(msg2give);  
+              else
+                B_output(msg2give);  
             }
-          else if (eventptr->evtype ==  FROM_LAYER3) {
+
+          else if (eventptr->evtype ==  FROM_LAYER3) 
+          {
             pkt2give.seqnum = eventptr->pktptr->seqnum;
             pkt2give.acknum = eventptr->pktptr->acknum;
             pkt2give.checksum = eventptr->pktptr->checksum;
+
             for (i=0; i<20; i++)  
                 pkt2give.payload[i] = eventptr->pktptr->payload[i];
-	    if (eventptr->eventity ==A)      /* deliver packet by calling */
-   	       A_input(pkt2give);            /* appropriate entity  */
-            else
-   	       B_input(pkt2give);
-	    free(eventptr->pktptr);          /* free the memory for packet */
-            }
-          else if (eventptr->evtype ==  TIMER_INTERRUPT) {
-            if (eventptr->eventity == A) 
-	       A_timerinterrupt();
-             else
-	       B_timerinterrupt();
-             }
-          else  {
-	     printf("INTERNAL PANIC: unknown event type \n");
-             }
-        free(eventptr);
+
+            if (eventptr->eventity ==A)      /* deliver packet by calling */
+                A_input(pkt2give);            /* appropriate entity  */
+                  else
+                B_input(pkt2give);
+            free(eventptr->pktptr);          /* free the memory for packet */
+                  }
+                else if (eventptr->evtype ==  TIMER_INTERRUPT) {
+                  if (eventptr->eventity == A) 
+              A_timerinterrupt();
+                  else
+              B_timerinterrupt();
+                  }
+                else  
+                {
+                  printf("INTERNAL PANIC: unknown event type \n");
+                }
+              //free(eventptr);
         }
+  
+
+  
+
 
 terminate:
-   printf(" Simulator terminated at time %f\n after sending %d msgs from layer5\n",time,nsim);
+    printf(" Simulator terminated at time %f\n after sending %d msgs from layer5\n",time,nsim);
 }
 
 
@@ -365,9 +395,9 @@ init()                         /* initialize the simulator */
   
   if(DEBUG)
   {
-    nsimmax = 10;
-    lossprob =0.2;
-    corruptprob = 0.2;
+    nsimmax = 100;
+    lossprob =0.1;
+    corruptprob = 0.1;
     lambda = 1000;
     TRACE = 2;
   }
