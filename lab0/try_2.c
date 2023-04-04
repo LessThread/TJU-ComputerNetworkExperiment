@@ -149,8 +149,11 @@ A_timerinterrupt()// 超时作为判断依据，重发操作在这里实现
   //重发缓冲区,考虑两种情况，后移窗口和不后移情况
   int start=base % buf_size;
   int end=nextseqnum % buf_size;
+  printf("buf:%d,%d\n",start,end);
+  getchar();
   if(end>start)
   {
+    printf("**************************\n");
     for(int i=start;i<end;i++)
     {
     PRINTF(" A_timerinterrupt:A ends timing and resend the packet\n");
@@ -159,6 +162,7 @@ A_timerinterrupt()// 超时作为判断依据，重发操作在这里实现
   }
   else
   {
+     printf("*#############################\n");
      for(int i=start;i<buf_size;i++)
     {
     PRINTF(" A_timerinterrupt:A ends timing and resend the packet\n");
@@ -205,7 +209,6 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,packet.seqnum,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    //PRINTF("\033[0m\033[1;32m B receive OK \033[0m \n");
     PRINTF(" B_input:B receive OK and send ACK \n");
     B_last++;
   }
@@ -215,7 +218,6 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    //PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
     PRINTF("B_input:B receive incorrect, B send NAK  \n");
   }
   
@@ -224,7 +226,6 @@ B_input(struct pkt packet)
     struct pkt ret = generatePkg(message,ERROR,packet.seqnum);
     tolayer3(B_SEND,ret);
 
-    //PRINTF("\033[0m\033[1;31m B get ERROR \033[0m \n");
     PRINTF("B_input: the packet lost, B send NAK  \n");
   }
   
