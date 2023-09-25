@@ -1,0 +1,35 @@
+SRC_DIR := src
+OBJ_DIR := obj
+
+SRC := $(wildcard $(SRC_DIR)/*.c)
+OBJ := $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o
+
+BIN := liso_server
+
+CC  := gcc
+CPPFLAGS := -Iinclude
+CFLAGS   := -g -Wall
+
+default: all
+all : liso_server
+
+$(SRC_DIR)/lex.yy.c: $(SRC_DIR)/lexer.l
+	flex -o $@ $^
+
+$(SRC_DIR)/y.tab.c: $(SRC_DIR)/parser.y
+	yacc -d $^
+	mv y.tab.c $@
+	mv y.tab.h $(SRC_DIR)/y.tab.h
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+liso_server: $(OBJ_DIR)/echo_server.o $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o
+	$(CC) -Werror $^ -o $@
+
+$(OBJ_DIR):
+	mkdir $@
+
+clean:
+	$(RM) $(OBJ) $(BIN) $(SRC_DIR)/lex.yy.c $(SRC_DIR)/y.tab.*
+	$(RM) -r $(OBJ_DIR)
